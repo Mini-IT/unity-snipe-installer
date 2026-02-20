@@ -1,0 +1,19 @@
+{
+  "name": "com.miniit.snipe.installer",
+  "displayName": "MiniIT Snipe Installer",
+  "version": "1.0.0",
+  "unity": "2021.3",
+  "description": "Editor window and automation utilities for installing required scoped registries and packages for Snipe-based projects.",
+  "keywords": [
+    "MiniIT",
+    "Snipe",
+    "Installer",
+    "UPM"
+  ],
+  "author": {
+    "name": "MiniIT"
+  },
+  "dependencies": {
+    "org.nuget.system.text.json": "8.0.5"
+  }
+}

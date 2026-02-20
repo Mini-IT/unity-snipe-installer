@@ -1,0 +1,37 @@
+.root { padding: 12px; flex-grow: 1; }
+.title { -unity-font-style: bold; font-size: 16px; margin-bottom: 8px; }
+.section-title { margin-top: 10px; margin-bottom: 4px; -unity-font-style: bold; }
+.list {
+    margin-bottom: 4px;
+    padding: 4px;
+    border-top-width: 1px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.15);
+    border-right-color: rgba(255, 255, 255, 0.15);
+    border-bottom-color: rgba(255, 255, 255, 0.15);
+    border-left-color: rgba(255, 255, 255, 0.15);
+    background-color: rgba(0, 0, 0, 0.08);
+}
+.packages-list { }
+.list-item {
+    white-space: normal;
+    margin-top: 1px;
+    margin-bottom: 1px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    color: rgba(255,255,255,0.9);
+}
+.install-status {
+    display: none;
+    margin-bottom: 4px;
+    padding-left: 2px;
+}
+.install-status-text {
+    color: rgba(255, 220, 130, 0.95);
+}
+.install-current-package-text {
+    color: rgba(255,255,255,0.85);
+}
+.row { flex-direction: row; gap: 8px; margin-top: 6px; }

@@ -1,0 +1,23 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Scripts/src/Editor/Resources/UI/SnipeInstallerWindow.uss?fileID=7433441132597879392&amp;guid=8da4de953369348d6a8cf5ca9ef91a74&amp;type=3#SnipeInstallerWindow" />
+    <ui:VisualElement class="root">
+        <ui:Label text="Snipe Installer" class="title" />
+
+        <ui:Label text="Scopes To Install" class="section-title" />
+        <ui:ScrollView name="ScopesList" class="list" mode="Vertical" />
+        <ui:VisualElement class="row">
+            <ui:Button name="InstallScopesBtn" text="Install Scopes" />
+        </ui:VisualElement>
+
+        <ui:Label text="Packages To Install" class="section-title" />
+        <ui:ScrollView name="PackagesList" class="list packages-list" mode="Vertical" />
+        <ui:VisualElement name="PackagesInstallStatusContainer" class="install-status">
+            <ui:Label name="PackagesInstallStatusLabel" class="install-status-text" />
+            <ui:Label name="CurrentPackageLabel" class="install-current-package-text" />
+        </ui:VisualElement>
+        <ui:VisualElement class="row">
+            <ui:Button name="InstallPackagesBtn" text="Install Packages" />
+            <ui:Button name="ResetPrefsBtn" text="Reset Installer Prefs" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

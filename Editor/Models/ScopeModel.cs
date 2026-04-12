@@ -1,19 +1,12 @@
-using System.Text.Json.Serialization;
+using System;
 
 namespace MiniIT.SnipeInstaller.Editor.Models
 {
+    [Serializable]
     internal sealed class ScopeModel
     {
-        public readonly string ScopeName;
-        public readonly string RegistryUrl;
-        public readonly string RegistryName;
-
-        [JsonConstructor]
-        public ScopeModel(string scopeName, string registryName, string registryUrl)
-        {
-            ScopeName = scopeName;
-            RegistryUrl = registryUrl;
-            RegistryName = registryName;
-        }
+        public string ScopeName;
+        public string RegistryUrl;
+        public string RegistryName;
     }
 }

@@ -1,20 +1,12 @@
-using System.Text.Json.Serialization;
+using System;
 
 namespace MiniIT.SnipeInstaller.Editor.Models
 {
+    [Serializable]
     internal sealed class PackageModel
     {
-        public readonly string Name;
-        public readonly string[] Dependencies;
-
-        public readonly ScopeModel Scope;
-
-        [JsonConstructor]
-        public PackageModel(string name, string[] dependencies, ScopeModel scope)
-        {
-            Name = name;
-            Scope = scope;
-            Dependencies = dependencies;
-        }
+        public string Name;
+        public string[] Dependencies;
+        public ScopeModel Scope;
     }
 }

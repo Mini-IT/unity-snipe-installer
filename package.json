@@ -13,7 +13,5 @@
   "author": {
     "name": "MiniIT"
   },
-  "dependencies": {
-    "org.nuget.system.text.json": "8.0.5"
-  }
+  "dependencies": {}
 }

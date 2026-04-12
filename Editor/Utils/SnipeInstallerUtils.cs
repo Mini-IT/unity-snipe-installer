@@ -1,9 +1,6 @@
-using System.Text.Json.Serialization.Metadata;
 using MiniIT.SnipeInstaller.Editor.Models;
 using System.Security.Cryptography;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
-using System.Text.Json;
 using UnityEditor;
 using UnityEngine;
 using System.Text;
@@ -15,13 +12,10 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
     internal static class SnipeInstallerUtils
     {
         private const string SCOPED_REGISTIRES = "scopedRegistries";
-        private const string SCOPES = "scopes";
         private const string DEPENDENCIES = "dependencies";
         private const string VERSION = "version";
-        private const string NAME = "name";
-        private const string URL = "url";
         private const string ORG_NUGET_PREFIX = "org.nuget.";
- 
+
         internal static string GetPackagesHash()
         {
             var asset = Resources.Load<TextAsset>("packages");
@@ -55,92 +49,94 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
                 return Array.Empty<PackageModel>();
             }
 
-            var root = JsonNode.Parse(packagesTextAsset.text);
-            var listNode = root?["list"];
+            var rootModel = new RequiredPackagesRootModel();
 
-            if (listNode == null)
+            try
+            {
+                EditorJsonUtility.FromJsonOverwrite(packagesTextAsset.text, rootModel);
+            }
+            catch
             {
                 return Array.Empty<PackageModel>();
             }
 
-            return JsonSerializer.Deserialize<PackageModel[]>(listNode.ToJsonString(), new JsonSerializerOptions
-            {
-                TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
-                PropertyNameCaseInsensitive = true,
-                IncludeFields = true
-            }) ?? Array.Empty<PackageModel>();
+            return rootModel.list ?? Array.Empty<PackageModel>();
         }
 
         internal static bool TryAddScopeRegistry(string scopeName, string registryName, string registryUrl)
         {
             string manifestPath = GetManifestPath();
 
-            var root = JsonNode.Parse(File.ReadAllText(manifestPath))?.AsObject()
-                       ?? new JsonObject();
-            var scopedRegistries = root[SCOPED_REGISTIRES] as JsonArray
-                                   ?? new JsonArray();
-
-            root[SCOPED_REGISTIRES] = scopedRegistries;
-
-            JsonObject targetRegistry = default;
-
-            foreach (var node in scopedRegistries)
+            if (!File.Exists(manifestPath))
             {
-                var jsonObject = node as JsonObject;
+                return false;
+            }
 
-                if (jsonObject == null)
+            string manifestJson = File.ReadAllText(manifestPath);
+
+            if (!TryParseJsonObjectEntries(manifestJson, out var manifestEntries))
+            {
+                return false;
+            }
+
+            var scopedRegistries = GetScopedRegistries(manifestEntries);
+            int targetRegistryIndex = -1;
+
+            for (int i = 0; i < scopedRegistries.Count; ++i)
+            {
+                if (!string.Equals(scopedRegistries[i]?.url, registryUrl, StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                if ((string)jsonObject[URL] == registryUrl)
+                targetRegistryIndex = i;
+                break;
+            }
+
+            if (targetRegistryIndex < 0)
+            {
+                scopedRegistries.Add(new ScopedRegistryManifestModel
                 {
-                    targetRegistry = jsonObject;
-                    break;
+                    name = registryName,
+                    url = registryUrl,
+                    scopes = Array.Empty<string>()
+                });
+                targetRegistryIndex = scopedRegistries.Count - 1;
+            }
+
+            var targetRegistry = scopedRegistries[targetRegistryIndex] ?? new ScopedRegistryManifestModel();
+            targetRegistry.name = string.IsNullOrWhiteSpace(targetRegistry.name) ? registryName : targetRegistry.name;
+            targetRegistry.url = string.IsNullOrWhiteSpace(targetRegistry.url) ? registryUrl : targetRegistry.url;
+
+            var scopes = new List<string>(targetRegistry.scopes ?? Array.Empty<string>());
+            bool hasScope = false;
+
+            for (int i = 0; i < scopes.Count; ++i)
+            {
+                if (!string.Equals(scopes[i], scopeName, StringComparison.Ordinal))
+                {
+                    continue;
                 }
+
+                hasScope = true;
+                break;
             }
 
-            if (targetRegistry == null)
+            if (hasScope)
             {
-                targetRegistry = new JsonObject
-                {
-                    [NAME] = registryName,
-                    [URL] = registryUrl,
-                    [SCOPES] = new JsonArray()
-                };
-
-                scopedRegistries.Add(targetRegistry);
+                return false;
             }
 
-            var scopes = targetRegistry[SCOPES] as JsonArray
-                         ?? new JsonArray();
+            scopes.Add(scopeName);
+            targetRegistry.scopes = scopes.ToArray();
+            scopedRegistries[targetRegistryIndex] = targetRegistry;
 
-            targetRegistry[SCOPES] = scopes;
+            string scopedRegistriesJson = SerializeScopedRegistries(scopedRegistries);
+            SetOrAddObjectEntry(manifestEntries, SCOPED_REGISTIRES, scopedRegistriesJson);
 
-            bool hasScope = default;
-
-            foreach (var scope in scopes)
-            {
-                if ((string)scope == scopeName)
-                {
-                    hasScope = true;
-                    break;
-                }
-            }
-
-            if (!hasScope)
-            {
-                scopes.Add(scopeName);
-
-                File.WriteAllText(manifestPath, root.ToJsonString(new JsonSerializerOptions
-                {
-                    TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
-                    WriteIndented = true
-                }));
-                AssetDatabase.Refresh();
-            }
-
-            return !hasScope;
+            File.WriteAllText(manifestPath, BuildJsonObjectText(manifestEntries));
+            AssetDatabase.Refresh();
+            return true;
         }
 
         internal static HashSet<string> GetInstalledScopeKeys()
@@ -153,46 +149,28 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
                 return installedScopes;
             }
 
-            var root = JsonNode.Parse(File.ReadAllText(manifestPath))?.AsObject();
+            string manifestJson = File.ReadAllText(manifestPath);
 
-            if (root == null)
+            if (!TryParseJsonObjectEntries(manifestJson, out var manifestEntries))
             {
                 return installedScopes;
             }
 
-            var scopedRegistries = root[SCOPED_REGISTIRES] as JsonArray;
+            var scopedRegistries = GetScopedRegistries(manifestEntries);
 
-            if (scopedRegistries == null)
+            for (int i = 0; i < scopedRegistries.Count; ++i)
             {
-                return installedScopes;
-            }
+                var registry = scopedRegistries[i];
+                string registryUrl = registry?.url;
 
-            foreach (var registryNode in scopedRegistries)
-            {
-                var registry = registryNode as JsonObject;
-
-                if (registry == null)
+                if (string.IsNullOrWhiteSpace(registryUrl) || registry.scopes == null)
                 {
                     continue;
                 }
 
-                var registryUrl = (string)registry[URL];
-
-                if (string.IsNullOrWhiteSpace(registryUrl))
+                for (int j = 0; j < registry.scopes.Length; ++j)
                 {
-                    continue;
-                }
-
-                var scopes = registry[SCOPES] as JsonArray;
-
-                if (scopes == null)
-                {
-                    continue;
-                }
-
-                foreach (var scopeNode in scopes)
-                {
-                    string scopeName = (string)scopeNode;
+                    string scopeName = registry.scopes[j];
 
                     if (string.IsNullOrWhiteSpace(scopeName))
                     {
@@ -216,31 +194,32 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
                 return installedPackages;
             }
 
-            var root = JsonNode.Parse(File.ReadAllText(packagesLockPath))?.AsObject();
+            string packagesLockJson = File.ReadAllText(packagesLockPath);
 
-            if (root == null)
+            if (!TryParseJsonObjectEntries(packagesLockJson, out var rootEntries)
+                || !TryGetObjectEntryRawValue(rootEntries, DEPENDENCIES, out var dependenciesJson)
+                || !TryParseJsonObjectEntries(dependenciesJson, out var dependencyEntries))
             {
                 return installedPackages;
             }
 
-            var dependencies = root[DEPENDENCIES] as JsonObject;
-
-            if (dependencies == null)
+            for (int i = 0; i < dependencyEntries.Count; ++i)
             {
-                return installedPackages;
-            }
+                var dependencyEntry = dependencyEntries[i];
 
-            foreach (var dependency in dependencies)
-            {
-                string packageId = dependency.Key;
-                var packageInfo = dependency.Value as JsonObject;
-
-                if (string.IsNullOrWhiteSpace(packageId) || packageInfo == null)
+                if (string.IsNullOrWhiteSpace(dependencyEntry.Key)
+                    || !TryParseJsonObjectEntries(dependencyEntry.RawValue, out var packageInfoEntries))
                 {
                     continue;
                 }
 
-                installedPackages[packageId] = (string)packageInfo[VERSION] ?? string.Empty;
+                if (!TryGetObjectEntryRawValue(packageInfoEntries, VERSION, out var versionJson)
+                    || !TryReadJsonStringValue(versionJson, out var versionValue))
+                {
+                    versionValue = string.Empty;
+                }
+
+                installedPackages[dependencyEntry.Key] = versionValue ?? string.Empty;
             }
 
             return installedPackages;
@@ -256,25 +235,19 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
                 return references;
             }
 
-            var root = JsonNode.Parse(File.ReadAllText(manifestPath))?.AsObject();
+            string manifestJson = File.ReadAllText(manifestPath);
 
-            if (root == null)
+            if (!TryParseJsonObjectEntries(manifestJson, out var rootEntries)
+                || !TryGetObjectEntryRawValue(rootEntries, DEPENDENCIES, out var dependenciesJson)
+                || !TryParseJsonObjectEntries(dependenciesJson, out var dependencyEntries))
             {
                 return references;
             }
 
-            var dependencies = root[DEPENDENCIES] as JsonObject;
-
-            if (dependencies == null)
+            for (int i = 0; i < dependencyEntries.Count; ++i)
             {
-                return references;
-            }
-
-            foreach (var dependency in dependencies)
-            {
-                string packageReference = (string)dependency.Value;
-
-                if (string.IsNullOrWhiteSpace(packageReference))
+                if (!TryReadJsonStringValue(dependencyEntries[i].RawValue, out var packageReference)
+                    || string.IsNullOrWhiteSpace(packageReference))
                 {
                     continue;
                 }
@@ -541,6 +514,541 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
         {
             string projectRootPath = GetProjectRootPath();
             return Path.Combine(projectRootPath, "Packages", "packages-lock.json");
+        }
+
+        private static List<ScopedRegistryManifestModel> GetScopedRegistries(List<JsonObjectEntry> rootEntries)
+        {
+            var registries = new List<ScopedRegistryManifestModel>();
+
+            if (!TryGetObjectEntryRawValue(rootEntries, SCOPED_REGISTIRES, out var scopedRegistriesJson))
+            {
+                return registries;
+            }
+
+            var wrapper = new ScopedRegistriesWrapper();
+            string wrapperJson = "{\"items\":" + scopedRegistriesJson + "}";
+
+            try
+            {
+                EditorJsonUtility.FromJsonOverwrite(wrapperJson, wrapper);
+            }
+            catch
+            {
+                return registries;
+            }
+
+            if (wrapper.items == null)
+            {
+                return registries;
+            }
+
+            registries.AddRange(wrapper.items);
+            return registries;
+        }
+
+        private static string SerializeScopedRegistries(List<ScopedRegistryManifestModel> scopedRegistries)
+        {
+            var wrapper = new ScopedRegistriesWrapper
+            {
+                items = scopedRegistries?.ToArray() ?? Array.Empty<ScopedRegistryManifestModel>()
+            };
+
+            string wrapperJson = EditorJsonUtility.ToJson(wrapper, true);
+
+            if (TryParseJsonObjectEntries(wrapperJson, out var wrapperEntries)
+                && TryGetObjectEntryRawValue(wrapperEntries, "items", out var itemsJson))
+            {
+                return itemsJson;
+            }
+
+            return "[]";
+        }
+
+        private static void SetOrAddObjectEntry(List<JsonObjectEntry> entries, string key, string rawValue)
+        {
+            for (int i = 0; i < entries.Count; ++i)
+            {
+                if (!string.Equals(entries[i].Key, key, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                entries[i] = new JsonObjectEntry(key, rawValue);
+                return;
+            }
+
+            entries.Add(new JsonObjectEntry(key, rawValue));
+        }
+
+        private static bool TryGetObjectEntryRawValue(List<JsonObjectEntry> entries, string key, out string rawValue)
+        {
+            for (int i = 0; i < entries.Count; ++i)
+            {
+                if (!string.Equals(entries[i].Key, key, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                rawValue = entries[i].RawValue;
+                return true;
+            }
+
+            rawValue = null;
+            return false;
+        }
+
+        private static string BuildJsonObjectText(List<JsonObjectEntry> entries)
+        {
+            var builder = new StringBuilder();
+            builder.Append("{\n");
+
+            for (int i = 0; i < entries.Count; ++i)
+            {
+                builder.Append("  \"");
+                builder.Append(EscapeJsonString(entries[i].Key));
+                builder.Append("\": ");
+                builder.Append(entries[i].RawValue);
+
+                if (i + 1 < entries.Count)
+                {
+                    builder.Append(',');
+                }
+
+                builder.Append('\n');
+            }
+
+            builder.Append('}');
+            builder.Append('\n');
+            return builder.ToString();
+        }
+
+        private static string EscapeJsonString(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder(value.Length + 8);
+
+            for (int i = 0; i < value.Length; ++i)
+            {
+                char c = value[i];
+
+                switch (c)
+                {
+                    case '"':
+                        builder.Append("\\\"");
+                        break;
+                    case '\\':
+                        builder.Append("\\\\");
+                        break;
+                    case '\b':
+                        builder.Append("\\b");
+                        break;
+                    case '\f':
+                        builder.Append("\\f");
+                        break;
+                    case '\n':
+                        builder.Append("\\n");
+                        break;
+                    case '\r':
+                        builder.Append("\\r");
+                        break;
+                    case '\t':
+                        builder.Append("\\t");
+                        break;
+                    default:
+                        if (c < ' ')
+                        {
+                            builder.Append("\\u");
+                            builder.Append(((int)c).ToString("x4"));
+                        }
+                        else
+                        {
+                            builder.Append(c);
+                        }
+                        break;
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static bool TryReadJsonStringValue(string valueJson, out string value)
+        {
+            value = null;
+
+            if (string.IsNullOrWhiteSpace(valueJson))
+            {
+                return false;
+            }
+
+            int index = SkipWhitespace(valueJson, 0);
+
+            if (!TryReadJsonString(valueJson, ref index, out value))
+            {
+                return false;
+            }
+
+            index = SkipWhitespace(valueJson, index);
+            return index == valueJson.Length;
+        }
+
+        private static bool TryParseJsonObjectEntries(string json, out List<JsonObjectEntry> entries)
+        {
+            entries = new List<JsonObjectEntry>();
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return false;
+            }
+
+            int index = SkipWhitespace(json, 0);
+
+            if (index >= json.Length || json[index] != '{')
+            {
+                return false;
+            }
+
+            ++index;
+
+            while (true)
+            {
+                index = SkipWhitespace(json, index);
+
+                if (index >= json.Length)
+                {
+                    return false;
+                }
+
+                if (json[index] == '}')
+                {
+                    ++index;
+                    break;
+                }
+
+                if (!TryReadJsonString(json, ref index, out var key))
+                {
+                    return false;
+                }
+
+                index = SkipWhitespace(json, index);
+
+                if (index >= json.Length || json[index] != ':')
+                {
+                    return false;
+                }
+
+                ++index;
+                index = SkipWhitespace(json, index);
+
+                int valueStart = index;
+
+                if (!TryReadJsonValue(json, ref index))
+                {
+                    return false;
+                }
+
+                int valueEnd = index;
+
+                entries.Add(new JsonObjectEntry(key, json.Substring(valueStart, valueEnd - valueStart).Trim()));
+
+                index = SkipWhitespace(json, index);
+
+                if (index >= json.Length)
+                {
+                    return false;
+                }
+
+                if (json[index] == ',')
+                {
+                    ++index;
+                    continue;
+                }
+
+                if (json[index] == '}')
+                {
+                    ++index;
+                    break;
+                }
+
+                return false;
+            }
+
+            index = SkipWhitespace(json, index);
+            return index == json.Length;
+        }
+
+        private static bool TryReadJsonValue(string json, ref int index)
+        {
+            if (index >= json.Length)
+            {
+                return false;
+            }
+
+            char c = json[index];
+
+            if (c == '"')
+            {
+                return TryReadJsonString(json, ref index, out _);
+            }
+
+            if (c == '{' || c == '[')
+            {
+                return TryReadJsonComposite(json, ref index);
+            }
+
+            int startIndex = index;
+
+            while (index < json.Length)
+            {
+                c = json[index];
+
+                if (c == ',' || c == '}' || c == ']')
+                {
+                    break;
+                }
+
+                ++index;
+            }
+
+            if (startIndex == index)
+            {
+                return false;
+            }
+
+            int endIndex = index;
+
+            while (endIndex > startIndex && char.IsWhiteSpace(json[endIndex - 1]))
+            {
+                --endIndex;
+            }
+
+            return endIndex > startIndex;
+        }
+
+        private static bool TryReadJsonComposite(string json, ref int index)
+        {
+            int depth = 0;
+            bool inString = false;
+            bool isEscaped = false;
+
+            while (index < json.Length)
+            {
+                char c = json[index++];
+
+                if (inString)
+                {
+                    if (isEscaped)
+                    {
+                        isEscaped = false;
+                        continue;
+                    }
+
+                    if (c == '\\')
+                    {
+                        isEscaped = true;
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inString = false;
+                    }
+
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{' || c == '[')
+                {
+                    ++depth;
+                    continue;
+                }
+
+                if (c == '}' || c == ']')
+                {
+                    --depth;
+
+                    if (depth == 0)
+                    {
+                        return true;
+                    }
+
+                    if (depth < 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryReadJsonString(string json, ref int index, out string value)
+        {
+            value = null;
+
+            if (index >= json.Length || json[index] != '"')
+            {
+                return false;
+            }
+
+            ++index;
+            var builder = new StringBuilder();
+
+            while (index < json.Length)
+            {
+                char c = json[index++];
+
+                if (c == '"')
+                {
+                    value = builder.ToString();
+                    return true;
+                }
+
+                if (c != '\\')
+                {
+                    builder.Append(c);
+                    continue;
+                }
+
+                if (index >= json.Length)
+                {
+                    return false;
+                }
+
+                char escaped = json[index++];
+
+                switch (escaped)
+                {
+                    case '"':
+                        builder.Append('"');
+                        break;
+                    case '\\':
+                        builder.Append('\\');
+                        break;
+                    case '/':
+                        builder.Append('/');
+                        break;
+                    case 'b':
+                        builder.Append('\b');
+                        break;
+                    case 'f':
+                        builder.Append('\f');
+                        break;
+                    case 'n':
+                        builder.Append('\n');
+                        break;
+                    case 'r':
+                        builder.Append('\r');
+                        break;
+                    case 't':
+                        builder.Append('\t');
+                        break;
+                    case 'u':
+                        if (!TryReadUnicodeCodepoint(json, ref index, out var unicodeChar))
+                        {
+                            return false;
+                        }
+
+                        builder.Append(unicodeChar);
+                        break;
+                    default:
+                        return false;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryReadUnicodeCodepoint(string json, ref int index, out char c)
+        {
+            c = default;
+
+            if (index + 3 >= json.Length)
+            {
+                return false;
+            }
+
+            int code = 0;
+
+            for (int i = 0; i < 4; ++i)
+            {
+                code <<= 4;
+                char h = json[index++];
+
+                if (h >= '0' && h <= '9')
+                {
+                    code |= h - '0';
+                    continue;
+                }
+
+                if (h >= 'a' && h <= 'f')
+                {
+                    code |= h - 'a' + 10;
+                    continue;
+                }
+
+                if (h >= 'A' && h <= 'F')
+                {
+                    code |= h - 'A' + 10;
+                    continue;
+                }
+
+                return false;
+            }
+
+            c = (char)code;
+            return true;
+        }
+
+        private static int SkipWhitespace(string text, int index)
+        {
+            while (index < text.Length && char.IsWhiteSpace(text[index]))
+            {
+                ++index;
+            }
+
+            return index;
+        }
+
+        [Serializable]
+        private sealed class RequiredPackagesRootModel
+        {
+            public PackageModel[] list;
+        }
+
+        [Serializable]
+        private sealed class ScopedRegistriesWrapper
+        {
+            public ScopedRegistryManifestModel[] items;
+        }
+
+        [Serializable]
+        private sealed class ScopedRegistryManifestModel
+        {
+            public string name;
+            public string url;
+            public string[] scopes;
+        }
+
+        private readonly struct JsonObjectEntry
+        {
+            internal readonly string Key;
+            internal readonly string RawValue;
+
+            internal JsonObjectEntry(string key, string rawValue)
+            {
+                Key = key;
+                RawValue = rawValue;
+            }
         }
     }
 }

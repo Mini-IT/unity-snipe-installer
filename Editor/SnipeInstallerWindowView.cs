@@ -93,13 +93,25 @@ namespace MiniIT.SnipeInstaller.Editor
         {
             if (_scopesListView != null)
             {
-                _scopesListView.RegisterCallback<GeometryChangedEvent>(_ => ApplyAdaptiveHeight(_scopesListView, 24f, 180f));
+                RegisterAdaptiveResizeHandler(_scopesListView, minHeight: 24f, maxHeight: 180f);
             }
 
             if (_packagesListView != null)
             {
-                _packagesListView.RegisterCallback<GeometryChangedEvent>(_ => ApplyAdaptiveHeight(_packagesListView, 24f, 360f));
+                RegisterAdaptiveResizeHandler(_packagesListView, minHeight: 24f, maxHeight: 360f);
             }
+        }
+
+        private static void RegisterAdaptiveResizeHandler(ScrollView scrollView, float minHeight, float maxHeight)
+        {
+            if (scrollView == null)
+            {
+                return;
+            }
+
+            scrollView.RegisterCallback<GeometryChangedEvent>(_ => ApplyAdaptiveHeight(scrollView, minHeight, maxHeight));
+            scrollView.contentContainer.RegisterCallback<GeometryChangedEvent>(_ =>
+                ApplyAdaptiveHeight(scrollView, minHeight, maxHeight));
         }
 
         private void BindList(ScrollView listView, IReadOnlyList<string> items, float minHeight, float maxHeight)
@@ -117,6 +129,7 @@ namespace MiniIT.SnipeInstaller.Editor
                 AddItemLines(listView, safeItems[i]);
             }
 
+            listView.scrollOffset = Vector2.zero;
             listView.schedule.Execute(() => ApplyAdaptiveHeight(listView, minHeight, maxHeight));
         }
 
@@ -146,10 +159,15 @@ namespace MiniIT.SnipeInstaller.Editor
             }
 
             float contentHeight = scrollView.contentContainer.layout.height;
+            int lineCount = scrollView.contentContainer.childCount;
+            float estimatedLineHeight = EditorGUIUtility.singleLineHeight + 6f;
+            float fallbackHeight = lineCount > 0
+                ? (lineCount * estimatedLineHeight) + 10f
+                : minHeight;
 
-            float measuredContentHeight = contentHeight > 0f ? contentHeight + 4f : minHeight;
+            float measuredContentHeight = contentHeight > 0f ? contentHeight + 8f : fallbackHeight;
             float targetHeight = Mathf.Clamp(measuredContentHeight, minHeight, maxHeight);
-            bool hasOverflow = measuredContentHeight > maxHeight;
+            bool hasOverflow = measuredContentHeight > maxHeight + 0.5f;
 
             scrollView.style.height = targetHeight;
             scrollView.style.minHeight = minHeight;

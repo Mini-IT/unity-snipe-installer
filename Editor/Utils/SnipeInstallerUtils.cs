@@ -65,6 +65,11 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
 
         internal static bool TryAddScopeRegistry(string scopeName, string registryName, string registryUrl)
         {
+            if (!IsScopeValid(scopeName, registryUrl))
+            {
+                return false;
+            }
+
             string manifestPath = GetManifestPath();
 
             if (!File.Exists(manifestPath))
@@ -373,6 +378,17 @@ namespace MiniIT.SnipeInstaller.Editor.Utils
         internal static string BuildScopeKey(string registryUrl, string scopeName)
         {
             return $"{registryUrl}|{scopeName}";
+        }
+
+        internal static bool IsScopeValid(ScopeModel scope)
+        {
+            return scope != null && IsScopeValid(scope.ScopeName, scope.RegistryUrl);
+        }
+
+        internal static bool IsScopeValid(string scopeName, string registryUrl)
+        {
+            return !string.IsNullOrWhiteSpace(scopeName)
+                   && !string.IsNullOrWhiteSpace(registryUrl);
         }
 
         private static bool IsPackageIdProvidedByAssemblies(string packageId, HashSet<string> installedAssemblyNames)

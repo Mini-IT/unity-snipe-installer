@@ -127,7 +127,7 @@ namespace MiniIT.SnipeInstaller.Editor
             {
                 var scope = packages[i]?.Scope;
 
-                if (scope == null)
+                if (!SnipeInstallerUtils.IsScopeValid(scope))
                 {
                     continue;
                 }

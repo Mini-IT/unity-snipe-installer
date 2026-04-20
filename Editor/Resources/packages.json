@@ -1,0 +1,38 @@
+{
+    "list": [
+        {
+            "Name": "org.nuget.microsoft.extensions.logging",
+            "Dependencies": null,
+            "Scope": {
+                "ScopeName": "org.nuget",
+                "RegistryName": "OpenUPM",
+                "RegistryUrl": "https://package.openupm.com"
+            }
+        },
+        {
+            "Name": "https://github.com/Mini-IT/SnipeToolsUnityPackage.git",
+            "Dependencies": [
+                "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+                "https://github.com/Mini-IT/fastJSON-unity-package.git#main"
+            ],
+            "Scope": null
+        },
+        {
+            "Name": "https://github.com/Mini-IT/unity-logger.git#main",
+            "Dependencies": null,
+            "Scope": null
+        },
+        {
+            "Name": "https://github.com/Mini-IT/SnipeUnityPackage.git#master",
+            "Dependencies": [
+                "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+                "https://github.com/Mini-IT/fastJSON-unity-package.git#main",
+                "https://github.com/Mini-IT/unity-framework-streamingassetsreader.git#main",
+                "https://github.com/Mini-IT/unity-framework-utilities.git#main",
+                "https://github.com/Mini-IT/unity-sharedprefs.git#main",
+                "https://github.com/Mini-IT/unity-altertask.git#main"
+            ],
+            "Scope": null
+        }
+    ]
+}
